@@ -8,17 +8,29 @@ Created on Mon Mar 27 13:09:20 2023
 
 import matplotlib.pyplot as plt
 
+import autograd
 import numpy as np
 import autograd.numpy as anp
 #import jax.numpy as jnp
 
 import pymanopt
-from pymanopt.manifolds import ComplexStiefel
+from complex_stiefel import ComplexStiefel
 from pymanopt.solvers import SteepestDescent,TrustRegions
 
-@pymanopt.function.Autograd
-def cost(W):
-    return anp.linalg.norm(samples - samples @ W @ anp.conjugate(W).T)**2
+
+def create_cost_function_egrad(samples):
+    @pymanopt.function.Callable
+    def cost(W):
+        tmp = samples - samples @ W @ anp.conjugate(W).T
+        return anp.real(anp.trace(tmp @ anp.conjugate(tmp).T))
+
+    @pymanopt.function.Callable
+    def egrad(W):
+        tmp = anp.conjugate(autograd.grad(cost)(W))
+        return tmp
+
+    return cost, egrad
+
 
 dimension = 3
 num_samples = 200
@@ -35,7 +47,8 @@ samples = samples @ u
 samples = samples - samples.mean(axis=0)
  
 manifold = ComplexStiefel(dimension, num_components)
-problem = pymanopt.Problem(manifold, cost)
+cost, egrad = create_cost_function_egrad(samples)
+problem = pymanopt.Problem(manifold, cost, egrad=egrad)
 solver = SteepestDescent()
 W_pca = solver.solve(problem)
 Proj_pca = W_pca @ W_pca.conj().T
