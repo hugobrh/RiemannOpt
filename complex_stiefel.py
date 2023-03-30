@@ -2,7 +2,7 @@ import numpy as np
 from scipy.linalg import expm
 
 from pymanopt.manifolds.manifold import EuclideanEmbeddedSubmanifold
-from pymanopt.tools.multi import multiprod, multiherm, multiconj
+from pymanopt.tools.multi import multiprod, multiherm, multihconj
 
 class ComplexStiefel(EuclideanEmbeddedSubmanifold):
     """
@@ -44,11 +44,11 @@ class ComplexStiefel(EuclideanEmbeddedSubmanifold):
 
 
     def proj(self, X, U):
-        return U - multiprod(X, multiherm(multiprod(multiconj(X), U)))
+        return U - multiprod(X, multiherm(multiprod(multihconj(X), U)))
 
     # TODO(nkoep): Implement the weingarten map instead.
     def ehess2rhess(self, X, egrad, ehess, H):
-        XtG = multiprod(multiconj(X), egrad)
+        XtG = multiprod(multihconj(X), egrad)
         symXtG = multiherm(XtG)
         HsymXtG = multiprod(H, symXtG)
         return self.proj(X, ehess - HsymXtG)
