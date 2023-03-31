@@ -146,10 +146,12 @@ class ComplexFixedRankEmbedded(EuclideanEmbeddedSubmanifold):
         in terms of the low-rank singular value decomposition of X, the
         gradient returned by the autodiff backends will have three components
         and will be in the form of a tuple egrad = (df/dU, df/dS, df/dV).
+        
         This function correctly maps a gradient of this form into the tangent
         space. See https://j-towns.github.io/papers/svd-derivative.pdf for a
         derivation.
         """
+                
         utdu = x[0].conj().T @ egrad[0]
         uutdu = x[0] @ utdu
         Up = (egrad[0] - uutdu) / x[1]
@@ -158,7 +160,7 @@ class ComplexFixedRankEmbedded(EuclideanEmbeddedSubmanifold):
         vvtdv = x[2].conj().T @ vtdv
         Vp = (egrad[2].conj().T - vvtdv) / x[1]
 
-        i = np.eye(self._k)
+        i = np.eye(self._k,dtype=np.complex128)
         f = 1 / (x[1][np.newaxis, :]**2 - x[1][:, np.newaxis]**2 + i)
 
         M = (f * (utdu - utdu.conj().T) * x[1] +
@@ -174,22 +176,38 @@ class ComplexFixedRankEmbedded(EuclideanEmbeddedSubmanifold):
     # Absil, Malick, "Projection-like retractions on matrix manifolds",
     # S IAM J. Optim., 22 (2012), pp. 135-158.
     def retr(self, X, Z):
-        Qu, Ru = np.linalg.qr(Z[0])
-        Qv, Rv = np.linalg.qr(Z[2])
+        ''' 
+        Commented out the computation of the metric projection via QR decomposition.
+        Instead just computed the straightforward rank-k truncated SVD.
+        '''
+        
+        # Qu, Ru = np.linalg.qr(Z[0])
+        # Qv, Rv = np.linalg.qr(Z[2])
 
-        T = np.vstack((np.hstack((np.diag(X[1]) + Z[1], Rv.conj().T)),
-                      np.hstack((Ru, np.zeros((self._k, self._k))))))
+        # T = np.vstack((np.hstack((np.diag(X[1]) + Z[1], Rv.conj().T)),
+        #               np.hstack((Ru, np.zeros((self._k, self._k),dtype=np.complex128)))))
 
-        # Numpy svd outputs St as a 1d vector, not a matrix.
-        Ut, St, Vt = np.linalg.svd(T, full_matrices=False)
+        # # Numpy svd outputs St as a 1d vector, not a matrix.
+        # Ut, St, Vt = np.linalg.svd(T, full_matrices=False)
 
-        # Transpose because numpy outputs it the wrong way.
-        Vt = Vt.T
+        # # Transpose because numpy outputs it the wrong way.
+        # Vt = Vt.T
 
-        U = np.hstack((X[0], Qu)) @ Ut[:, :self._k]
-        V = np.hstack((X[2].conj().T, Qv)) @ Vt[:, :self._k]
-        S = St[:self._k] + np.spacing(1)
-        return (U, S, V.conj().T)
+        # U = np.hstack((X[0], Qu)) @ Ut[:, :self._k]
+        # V = np.hstack((X[2].conj().T, Qv)) @ Vt[:, :self._k]
+        # S = St[:self._k] + np.spacing(1)
+        # return (U, S, V.conj().T)
+        
+        Xf = X[0] @ np.diag(X[1]) @ X[2]
+        Zf = self.tangent2ambient(X, Z)
+        Zf = Zf[0] @ Zf[1] @ Zf[2].conj().T
+        
+        U,S,Vh = np.linalg.svd(Xf+Zf,full_matrices=False)
+        Ur = U[:,:self._k] 
+        Sr = S[:self._k] + np.spacing(1)
+        Vrh = Vh[:self._k]
+        
+        return (Ur,Sr,Vrh)
         
     def norm(self, X, G):
         return np.sqrt(self.inner(X, G, G))
@@ -213,9 +231,9 @@ class ComplexFixedRankEmbedded(EuclideanEmbeddedSubmanifold):
         return _FixedRankTangentVector((Up, Z[1], Vp))
 
     def randvec(self, X):
-        Up = np.random.randn(self._m, self._k)
-        Vp = np.random.randn(self._n, self._k)
-        M = np.random.randn(self._k, self._k)
+        Up = np.random.randn(self._m, self._k) + 1j*np.random.randn(self._m, self._k)
+        Vp = np.random.randn(self._n, self._k) + 1j*np.random.randn(self._n, self._k)
+        M = np.random.randn(self._k, self._k)  + 1j*np.random.randn(self._k, self._k)
 
         Z = self._tangent(X, (Up, M, Vp))
 
@@ -251,9 +269,9 @@ class ComplexFixedRankEmbedded(EuclideanEmbeddedSubmanifold):
         return self.proj(X2, self.tangent2ambient(X1, G))
 
     def zerovec(self, X):
-        return _FixedRankTangentVector((np.zeros((self._m, self._k)),
-                                        np.zeros((self._k, self._k)),
-                                        np.zeros((self._n, self._k))))
+        return _FixedRankTangentVector((np.zeros((self._m, self._k),dtype=np.complex128),
+                                        np.zeros((self._k, self._k),dtype=np.complex128),
+                                        np.zeros((self._n, self._k),dtype=np.complex128)))
 
 
 class _FixedRankTangentVector(tuple, ndarraySequenceMixin):

@@ -59,10 +59,11 @@ indices = np.argsort(eigenvalues)[::-1][:num_components]
 W_an = eigenvectors[:, indices]
 Proj_an = W_an @ W_an.conj().T
 
-np.linalg.norm(Proj_pca - Proj_an)
+print(f'||Proj_rgd - Prpj_svd|| : {np.linalg.norm(Proj_pca - Proj_an)}')
 
 fig, axs = plt.subplots(1,2,sharey=(True))
 axs[0].imshow(np.abs(Proj_pca))
 axs[0].set_title('Projector PCA via Riem Grad')
 axs[1].imshow(np.abs(Proj_an))
 axs[1].set_title('Projector PCA via Analytic form')
+plt.show()

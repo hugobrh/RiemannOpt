@@ -24,20 +24,6 @@ def create_cost_egrad(backend, A, rank):
         def cost(u, s, vt):
             X = u @ np.diag(s) @ vt
             return np.linalg.norm(X - A) ** 2
-    elif backend == "Callable":
-        @pymanopt.function.Callable
-        def cost(u, s, vt):
-            X = u @ np.diag(s) @ vt
-            return la.norm(X - A) ** 2
-
-        @pymanopt.function.Callable
-        def egrad(u, s, vt):
-            X = u @ np.diag(s) @ vt
-            S = np.diag(s)
-            gu = 2 * (X - A) @ (S @ vt).T
-            gs = 2 * np.diag(u.T @ (X - A) @ vt.T)
-            gvt = 2 * (u @ S).T @ (X - A)
-            return gu, gs, gvt
     else:
         raise ValueError("Unsupported backend '{:s}'".format(backend))
 
@@ -45,7 +31,16 @@ def create_cost_egrad(backend, A, rank):
 
 
 def run(backend=SUPPORTED_BACKENDS[0], quiet=True):
-    Y_mp = np.load('../TTW_Bscan_no_interior_walls_ricker_merged_3mm_curated_resampled.npy')
+    np.random.seed(0)
+    Yl = np.random.randn(100,5) + 1j*np.random.randn(100,5)
+    Yr = np.random.randn(5,67) + 1j*np.random.randn(5,67)
+    Y_mp = Yl @ Yr    
+    
+    # #Preprocess Y to samples of zero mean and unit norm
+    # Y_mp = Y_mp - Y_mp.mean(axis=0)
+    # col_norms = np.linalg.norm(Y_mp,axis=0)
+    # Y_mp = Y_mp / col_norms[np.newaxis:,]
+
     matrix = np.abs(Y_mp)
     m,n = Y_mp.shape
     rank = 5
@@ -59,25 +54,27 @@ def run(backend=SUPPORTED_BACKENDS[0], quiet=True):
     solver = ConjugateGradient()
     left_singular_vectors, singular_values, right_singular_vectors = \
         solver.solve(problem)
-    low_rank_approximation = (left_singular_vectors @
+    lra_rgd = (left_singular_vectors @
                               np.diag(singular_values) @
                               right_singular_vectors)
 
     if not quiet:
         u, s, vt = la.svd(matrix, full_matrices=False)
         indices = np.argsort(s)[-rank:]
-        low_rank_solution = (u[:, indices] @
+        lra_svd = (u[:, indices] @
                              np.diag(s[indices]) @
                              vt[indices, :])
-        print("Frobenius norm error:",
-              la.norm(low_rank_approximation - low_rank_solution))
+        print(f'||Y_mp - Y_lra_svd|| : {np.linalg.norm(lra_svd - Y_mp)}')
+        print(f'||Y_mp - Y_lra_rgd|| : {np.linalg.norm(lra_rgd - Y_mp)}')
+        print(f'||Y_lra_svd - Y_lra_rgd|| : {np.linalg.norm(lra_rgd - lra_svd)}')
+
         
         fig, axs = plt.subplots(1,3,sharey=(True))
         axs[0].imshow(matrix)
         axs[0].set_title('Y true')
-        axs[1].imshow(low_rank_solution)
+        axs[1].imshow(lra_svd)
         axs[1].set_title('Y LRA Frob SVD')
-        axs[2].imshow(low_rank_approximation)
+        axs[2].imshow(lra_rgd)
         axs[2].set_title('Y LRA Frob RGD')
         plt.show()
         
